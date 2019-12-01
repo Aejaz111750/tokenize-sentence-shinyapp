@@ -8,7 +8,7 @@ shinyServer(function(input, output, session) {
       document <- readLines(input$inputFile$datapath)
       doc.id <- seq(1:length(document))
       calid <- data.frame(doc.id, document)
-      tokens <- tokenize_sentences(document)
+      #tokens <- tokenize_sentences(document)
       return(calid)
     }
   })
@@ -17,7 +17,7 @@ shinyServer(function(input, output, session) {
       return(NULL)
     }
     else{
-      dataSet()$tokens
+      dataSet()$calid
     }
   })
 })
