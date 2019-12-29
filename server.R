@@ -170,7 +170,7 @@ shinyServer(function(input, output, session) {
       giveSentences <- sentenceArray()
       result <- Reduce('|', lapply(givenKeys, function(key) grepl(key, giveSentences$Sentences, fixed=TRUE)))
       filteredSenctences <- giveSentences[result,, drop=FALSE]$Sentences
-      return(tibble('Filtered Senctences'=filteredSenctences))
+      return(tibble('Filtered Sentences'=filteredSenctences))
     }
     else{
       return(NULL)
@@ -182,7 +182,7 @@ shinyServer(function(input, output, session) {
        (!is.null(filteredSenctences()) && nrow(filteredSenctences())>0)){
       featureDF <- filteredSenctences()
       for(key in givenKeys){
-        featureDF <- featureDF %>% mutate(!!as.name(key):=getKeywordCounts(`Filtered Senctences`, key))
+        featureDF <- featureDF %>% mutate(!!as.name(key):=getKeywordCounts(`Filtered Sentences`, key))
       }
       featureDF <- featureDF[-1]
       keyFrequency <- data.frame('Words'=colnames(featureDF), 'Frequency'=colSums(featureDF))
@@ -211,7 +211,7 @@ shinyServer(function(input, output, session) {
     }
   })
   output$filteredSentencesCount <- renderText({
-    if(length(unlist(keySet()))==1 && unlist(keySet())==""){
+    if(is.null(input$keywords) || (length(unlist(keySet()))==1 && unlist(keySet())=="")){
       return(NULL)
     }
     else{
@@ -219,7 +219,7 @@ shinyServer(function(input, output, session) {
   }
   })
   output$filteredOutput <- renderTable({
-    if(is.null(input$keywords) || (inFileExt()=='csv' && is.null(csvSelectedValue())) || 
+    if ((is.null(input$inputFile) || (is.null(input$keywords))) || (inFileExt()=='csv' && is.null(csvSelectedValue())) || 
        (length(unlist(keySet()))==1 && unlist(keySet())=="")){
       return(NULL)
     }
@@ -242,7 +242,8 @@ shinyServer(function(input, output, session) {
       return(NULL)
     }
     else{
-      relativeFrequency() %>% ggplot(aes(x= reorder(Words, -RelativeFrequency), y=RelativeFrequency)) + geom_col() + xlab(NULL)
+      relativeFrequency() %>% ggplot(aes(x= reorder(Words, -RelativeFrequency), y=RelativeFrequency)) + geom_col() +
+         theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5)) + xlab(NULL)
     }
   })
   output$relativeWordCloud <- renderPlot({
