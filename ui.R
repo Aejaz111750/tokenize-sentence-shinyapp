@@ -5,6 +5,7 @@ library(shiny)
 library(tools)
 library(ggplot2)
 library(stringr)
+library(stringi)
 library(tidytext)
 library(wordcloud)
 
@@ -22,6 +23,7 @@ shinyUI(
       hr(),
       # " Case sensitive check box "
       checkboxInput("isCaseSensitive", "Case Sensitive Search", value = FALSE),
+      checkboxInput("isCSVWithHeaders", "CSV with Headers", value = TRUE),
       hr(),
       # " Dynamic field based on input file "
       tags$div(id="csvColumns"),
@@ -39,10 +41,10 @@ shinyUI(
                            # verbatimTextOutput("start")
                            ),
                   tabPanel("Sentence Tokens", 
-                           h3(p("All the sentences")),
-                           tableOutput("output"),
                            h4(p("Given keywords")),
-                           verbatimTextOutput("outKeys")),
+                           verbatimTextOutput("outKeys"),
+                           h3(p("All the sentences")),
+                           tableOutput("output")),
                   tabPanel("Filtered Sentences",
                            h4(p("Filtered Sentences for given keywords")),
                            h5(p("Count of filtered sentences: ")),

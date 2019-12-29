@@ -1,5 +1,9 @@
 # Basic Sentence Tokenizer
 shinyServer(function(input, output, session) {
+  # " adds feature columns for count of key words "
+  getKeywordCounts <- function(sentence, key){
+    return(stri_count_fixed(sentence, key))
+  }
   # " file encoding from UI "
   fileEncoding <- reactive({
     return(input$fileEncoding)
@@ -24,6 +28,19 @@ shinyServer(function(input, output, session) {
       return(NULL)
     }
   })
+  csvHeaders <- reactive({
+    if(!is.null(input$inputFile) && inFileExt()=='csv'){
+      if(isCSVWithHeaders()){
+        return(csvColumnsFromFile())
+      }
+      else{
+        return(seq(1, ncol(dataSet()), by=1))
+      }
+    }
+    else{
+      return(NULL)
+    }
+  })
   # " Observer for the dynamic field to capture column name "
   observeEvent(input$inputFile, {
     if(length(colSelector_added)==0 && inFileExt()=='csv'){
@@ -37,8 +54,9 @@ shinyServer(function(input, output, session) {
           selectInput(
           # selectizeInput(
             inputId = paste0("csvColumns",'_exists'),
-            label = 'CSV Columns',
-            choices = csvColumnsFromFile(),
+            label = 'Choose the text column',
+            choices = csvHeaders(),
+            selected = NULL,
           ),
           id = id
         )
@@ -49,6 +67,17 @@ shinyServer(function(input, output, session) {
       removeUI(selector = paste0('#', colSelector_added[length(colSelector_added)]), multiple = TRUE, immediate=TRUE)
       colSelector_added <<- colSelector_added[-length(colSelector_added)]
     }
+  })
+  observeEvent(input$isCSVWithHeaders,{
+    values = csvSelectedValue()
+    updateSelectInput(session, paste0("csvColumns",'_exists'), 
+                      choices = csvHeaders(),
+                      selected = NULL)
+    values = csvSelectedValue()
+  })
+  # " Does the CSV had headers "
+  isCSVWithHeaders <- reactive({
+    return(input$isCSVWithHeaders)
   })
   # " Case sensitive flag "
   isCaseSensitive <- reactive({
@@ -88,6 +117,9 @@ shinyServer(function(input, output, session) {
     else{
         givenKeys <- input$keywords
         givenKeys <- givenKeys %>% str_split(',') %>% lapply(str_trim)
+        skipValues = lapply(givenKeys, function(k) k!='')
+        tempValues = tibble(keys=unlist(givenKeys))
+        givenKeys = tempValues[unlist(skipValues),,]$keys
         if(isCaseSensitive()){
           return(givenKeys)
         }
@@ -104,7 +136,15 @@ shinyServer(function(input, output, session) {
         data = NULL
       }
       else{
-        data = dataSet()[,csvSelectedValue()]
+        if(isCSVWithHeaders() && suppressWarnings(is.na(as.integer(csvSelectedValue())))){
+          data = dataSet()[,csvSelectedValue()]
+        }
+        else if (suppressWarnings(!is.na(as.integer(csvSelectedValue())))){
+          data = dataSet()[,as.integer(csvSelectedValue())]
+        }
+        else{
+          return(NULL)
+        }
       }
     }
     else{
@@ -126,9 +166,8 @@ shinyServer(function(input, output, session) {
   # " Filtering the sentences based on given key words "
   filteredSenctences <- reactive({
     givenKeys <- unlist(keySet())
-    if(length(givenKeys) > 0 ){
+    if(length(givenKeys) > 0 && !is.null(sentenceArray())){
       giveSentences <- sentenceArray()
-      #result <- Reduce('|', lapply(givenKeys, function(key) grepl(paste0("\\<",key,"\\>"), giveSentences$Sentences, fixed=TRUE)))
       result <- Reduce('|', lapply(givenKeys, function(key) grepl(key, giveSentences$Sentences, fixed=TRUE)))
       filteredSenctences <- giveSentences[result,, drop=FALSE]$Sentences
       return(tibble('Filtered Senctences'=filteredSenctences))
@@ -137,41 +176,22 @@ shinyServer(function(input, output, session) {
       return(NULL)
     }
   })
-  # " Preparing the word frequency based on keyword from corpus (word tokenizing) "
-  wordFrequency <- reactive({
-      givenKeys <- unlist(keySet())
-    if(inFileExt()=='csv'){
-      if(is.null(csvSelectedValue())){
-        data = NULL
-      }
-      else{
-        data = as.vector(dataSet()[,csvSelectedValue()])
-      }
-    }
-    else{
-      data = dataSet()
-    }
-    if(length(givenKeys) > 0 ){
-      if(isCaseSensitive()){
-        bagOfWords <- tibble(Document=data) %>%
-                        unnest_tokens(Words, Document, to_lower=FALSE)
-      }
-      else{
-        bagOfWords <- tibble(Document=data) %>%
-                        unnest_tokens(Words, Document, to_lower=TRUE)
-      }
-      keyWordFreq <- bagOfWords %>% count(Words, sort=TRUE, name='Frequency')
-      keyWordFreq <- keyWordFreq %>% filter(Words %in% givenKeys)
-      return(keyWordFreq)
-    }
-  })
-  # " Evaluating the relative frequency "
   relativeFrequency <- reactive({
-    wordFrequency <- wordFrequency()
-    total <- sum(wordFrequency$Frequency)
-    wordFrequency$RelativeFrequency <- (wordFrequency$Frequency /total) * 100
-    relativeFrequency <- wordFrequency[c('Words','RelativeFrequency')]
-    return(relativeFrequency)
+    givenKeys <- unlist(keySet())
+    if((length(givenKeys) >= 1 && givenKeys != "") && 
+       (!is.null(filteredSenctences()) && nrow(filteredSenctences())>0)){
+      featureDF <- filteredSenctences()
+      for(key in givenKeys){
+        featureDF <- featureDF %>% mutate(!!as.name(key):=getKeywordCounts(`Filtered Senctences`, key))
+      }
+      featureDF <- featureDF[-1]
+      keyFrequency <- data.frame('Words'=colnames(featureDF), 'Frequency'=colSums(featureDF))
+      rownames(keyFrequency)<-NULL
+      total <- sum(keyFrequency$Frequency)
+      keyFrequency$RelativeFrequency <- (keyFrequency$Frequency /total) * 100
+      relativeFrequency <- keyFrequency[c('Words','RelativeFrequency')]
+      return(relativeFrequency)
+    }
   })
   # " Outputs "
   output$output <-  renderTable({
@@ -208,7 +228,8 @@ shinyServer(function(input, output, session) {
     }
   })
   output$keyWordFreqOutput <- renderTable({
-    if(is.null(input$keywords) || (inFileExt()=='csv' && is.null(csvSelectedValue())) || nrow(relativeFrequency())==0){
+    if(is.null(input$keywords) || (inFileExt()=='csv' && is.null(csvSelectedValue())) || 
+       (is.null(relativeFrequency()) || nrow(relativeFrequency())==0)){
       return(NULL)
     }
     else{
@@ -216,7 +237,8 @@ shinyServer(function(input, output, session) {
     }
   })
   output$relativePlot <- renderPlot({
-    if(is.null(input$keywords) || (inFileExt()=='csv' && is.null(csvSelectedValue())) || nrow(relativeFrequency())==0){
+    if(is.null(input$keywords) || (inFileExt()=='csv' && is.null(csvSelectedValue())) || 
+       (is.null(relativeFrequency()) || nrow(relativeFrequency())==0)){
       return(NULL)
     }
     else{
@@ -225,7 +247,8 @@ shinyServer(function(input, output, session) {
   })
   output$relativeWordCloud <- renderPlot({
     if(is.null(input$keywords) || (length(unlist(keySet()))==1 && unlist(keySet())=="") || 
-       (inFileExt()=='csv' && is.null(csvSelectedValue())) || nrow(relativeFrequency())==0){
+       (inFileExt()=='csv' && is.null(csvSelectedValue())) || 
+       (is.null(relativeFrequency()) || nrow(relativeFrequency())==0)){
       return(NULL)
     }
     else{
