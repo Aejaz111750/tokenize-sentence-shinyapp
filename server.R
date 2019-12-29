@@ -1,5 +1,9 @@
 # Basic Sentence Tokenizer
 shinyServer(function(input, output, session) {
+  # " file encoding from UI "
+  fileEncoding <- reactive({
+    return(input$fileEncoding)
+  })
   # " Dynamic dropdown div values "
   colSelector_added = c()
   # " csv column headers, if .csv file if provided "
@@ -67,11 +71,11 @@ shinyServer(function(input, output, session) {
     }
     else{
       if(inFileExt()=='txt'){
-        txtData <- readLines(input$inputFile$datapath, encoding = "latin1")
+        txtData <- readLines(input$inputFile$datapath, encoding = fileEncoding())
         return(txtData)
       }
       else if (inFileExt()=='csv'){
-        csvData <- read.csv(input$inputFile$datapath)
+        csvData <- read.csv(input$inputFile$datapath, encoding = fileEncoding())
         return(csvData)
       }
     }

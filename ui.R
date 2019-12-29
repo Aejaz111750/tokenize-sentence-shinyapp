@@ -15,11 +15,14 @@ shinyUI(
     # Sidepane for inputs
     sidebarPanel(
       # " Input file for processing "
+      radioButtons("fileEncoding", "File Encoding", choices = c('LATIN1', 'UTF-8'), selected = 'LATIN1'),
       fileInput("inputFile", "Upload the corpus file (txt/csv)", multiple=FALSE, 
                     accept=c('.csv',
                              '.txt')),
+      hr(),
       # " Case sensitive check box "
       checkboxInput("isCaseSensitive", "Case Sensitive Search", value = FALSE),
+      hr(),
       # " Dynamic field based on input file "
       tags$div(id="csvColumns"),
       # " Keywords to be searched in corpus "
